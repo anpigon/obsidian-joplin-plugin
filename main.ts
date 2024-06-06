@@ -1,134 +1,148 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { joplinDataApi } from "joplin-api";
+import {
+	App,
+	Notice,
+	Plugin,
+	PluginSettingTab,
+	Setting,
+	TFile,
+	getFrontMatterInfo,
+	parseYaml,
+	stringifyYaml,
+} from "obsidian";
 
-// Remember to rename these classes and interfaces!
-
-interface MyPluginSettings {
-	mySetting: string;
+interface JoplinPluginSettings {
+	baseUrl: string;
+	token: string;
 }
 
-const DEFAULT_SETTINGS: MyPluginSettings = {
-	mySetting: 'default'
-}
+const DEFAULT_SETTINGS: JoplinPluginSettings = {
+	baseUrl: "http://localhost:41184",
+	token: "",
+};
 
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+export default class JoplinPlugin extends Plugin {
+	settings: JoplinPluginSettings;
 
 	async onload() {
+		console.log("loaded joplin plugin");
 		await this.loadSettings();
-
-		// This creates an icon in the left ribbon.
-		const ribbonIconEl = this.addRibbonIcon('dice', 'Sample Plugin', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
-		// Perform additional things with the ribbon
-		ribbonIconEl.addClass('my-plugin-ribbon-class');
-
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status Bar Text');
 
 		// This adds a simple command that can be triggered anywhere
 		this.addCommand({
-			id: 'open-sample-modal-simple',
-			name: 'Open sample modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			}
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'sample-editor-command',
-			name: 'Sample editor command',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				console.log(editor.getSelection());
-				editor.replaceSelection('Sample Editor Command');
-			}
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-sample-modal-complex',
-			name: 'Open sample modal (complex)',
-			checkCallback: (checking: boolean) => {
+			id: "sync-this-note",
+			name: "sync this note",
+			editorCheckCallback: (checking, editor, ctx) => {
 				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
-
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
+				if (!this.settings.token) {
+					new Notice(
+						"Please enter your Joplin access token in Settings."
+					);
+					return false;
 				}
-			}
+
+				if (!ctx.file) {
+					return false;
+				}
+
+				if (!checking) {
+					this.sync(ctx.file);
+				}
+
+				// This command will only show up in Command Palette when the check function returns true
+				return true;
+			},
 		});
 
 		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			console.log('click', evt);
-		});
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
-	}
-
-	onunload() {
-
+		this.addSettingTab(new JoplinSettingTab(this.app, this));
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		this.settings = Object.assign(
+			{},
+			DEFAULT_SETTINGS,
+			await this.loadData()
+		);
 	}
 
 	async saveSettings() {
 		await this.saveData(this.settings);
 	}
+
+	async sync(file: TFile) {
+		const contents = await this.app.vault.read(file);
+		console.log("contents", contents);
+		const { contentStart, frontmatter } = getFrontMatterInfo(contents);
+		const yml = parseYaml(frontmatter);
+		console.log("frontmatter", yml);
+		const title = yml["title"] || file.basename;
+		const body = contents.slice(contentStart);
+		const api = joplinDataApi({
+			type: "rest",
+			baseUrl: this.settings.baseUrl || DEFAULT_SETTINGS.baseUrl,
+			token: this.settings.token,
+		});
+
+		// TODO: 최근 업데이트 날짜 비교하여 동기화 하기
+
+		const joplinId = yml["joplin_id"];
+		if (joplinId) {
+			await api.note.update({ id: joplinId, title, body });
+		} else {
+			const results = await api.note.create({ title, body });
+			yml["joplin_id"] = results.id;
+			await this.app.vault.modify(
+				file,
+				`---\n${stringifyYaml(yml)}---\n${body}`
+			);
+		}
+		new Notice("The sync was successful.");
+	}
 }
 
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
+class JoplinSettingTab extends PluginSettingTab {
+	plugin: JoplinPlugin;
 
-	onOpen() {
-		const {contentEl} = this;
-		contentEl.setText('Woah!');
-	}
-
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
-	}
-}
-
-class SampleSettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
-
-	constructor(app: App, plugin: MyPlugin) {
+	constructor(app: App, plugin: JoplinPlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
 
+	/**
+	 * Displays the Joplin Authorization token setting in the plugin's container element.
+	 */
 	display(): void {
-		const {containerEl} = this;
+		const { containerEl } = this;
 
 		containerEl.empty();
 
 		new Setting(containerEl)
-			.setName('Setting #1')
-			.setDesc('It\'s a secret')
-			.addText(text => text
-				.setPlaceholder('Enter your secret')
-				.setValue(this.plugin.settings.mySetting)
-				.onChange(async (value) => {
-					this.plugin.settings.mySetting = value;
-					await this.plugin.saveSettings();
-				}));
+			.setName("Joplin Base Url")
+			.setDesc(
+				"The base path of the joplin web service, defaults to http://localhost:41184"
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder("http://localhost:41184")
+					.setValue(this.plugin.settings.baseUrl)
+					.onChange(async (value) => {
+						this.plugin.settings.baseUrl = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Joplin Authorization token")
+			.setDesc("Enter your Joplin Authorization token")
+			.addText((text) => {
+				text.inputEl.type = "password";
+				text.setPlaceholder("Enter your token")
+					.setValue(this.plugin.settings.token)
+					.onChange(async (value) => {
+						this.plugin.settings.token = value;
+						await this.plugin.saveSettings();
+					});
+			});
 	}
 }
