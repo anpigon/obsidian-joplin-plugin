@@ -1,5 +1,5 @@
 import { Api, NoteProperties, joplinDataApi } from "joplin-api";
-import { TFile, parseYaml, stringifyYaml } from "obsidian";
+import { parseYaml } from "obsidian";
 
 const joplinNoteFields: (keyof NoteProperties)[] = [
 	"parent_id",
@@ -49,37 +49,6 @@ export default class JoplinClient {
 			joplinId,
 			title,
 		};
-	}
-
-	async syncExistingJoplinNote(
-		file: TFile,
-		joplinId: string,
-		title: string,
-		body: string,
-		frontmatter: JoplinFrontMatter
-	) {
-		const notes = await this.client.note.get(joplinId, joplinNoteFields);
-		console.log(notes);
-
-		const joplinUpdatedTime = notes?.["updated_time"];
-		const obsidianUpdatedTime = file?.stat.mtime;
-
-		if (joplinUpdatedTime < obsidianUpdatedTime) {
-			console.log("obsidian -> joplin");
-			const results = await this.client.note.update({
-				id: joplinId,
-				title,
-				body,
-			});
-			console.log(results);
-			return `---\n${stringifyYaml(frontmatter)}---\n${body}`;
-		} else {
-			console.log("joplin -> obsidian");
-			const newTitle = notes?.["title"] ?? title;
-			const newBody = notes?.["body"]?.replace(/&nbsp;/g, " ") ?? body;
-			frontmatter["title"] = newTitle;
-			return `---\n${stringifyYaml(frontmatter)}---\n${newBody}`;
-		}
 	}
 
 	async updateJoplinNote(id: string, title: string, body: string) {
