@@ -1,24 +1,16 @@
 import {
-	App,
 	Notice,
 	Plugin,
-	PluginSettingTab,
-	Setting,
 	TFile,
 	getFrontMatterInfo,
 	stringifyYaml,
 } from "obsidian";
 import JoplinClient from "./helpers/joplin";
-
-interface JoplinPluginSettings {
-	baseUrl: string;
-	token: string;
-}
-
-const DEFAULT_SETTINGS: JoplinPluginSettings = {
-	baseUrl: "http://localhost:41184",
-	token: "",
-};
+import {
+	DEFAULT_SETTINGS,
+	JoplinPluginSettings,
+	JoplinSettingTab,
+} from "./settings";
 
 export default class JoplinPlugin extends Plugin {
 	settings: JoplinPluginSettings;
@@ -92,7 +84,11 @@ export default class JoplinPlugin extends Plugin {
 			const obsidianUpdatedTime = file?.stat.mtime;
 			if (joplinUpdatedTime < obsidianUpdatedTime) {
 				console.log("obsidian -> joplin");
-				await joplinClient.updateJoplinNote(joplinYaml.joplinId, title, body);
+				await joplinClient.updateJoplinNote(
+					joplinYaml.joplinId,
+					title,
+					body
+				);
 			} else {
 				console.log("joplin -> obsidian");
 				const newTitle = notes["title"] ?? title;
@@ -101,7 +97,9 @@ export default class JoplinPlugin extends Plugin {
 					...joplinYaml,
 					title: newTitle,
 				};
-				const newContents = `---\n${stringifyYaml(newYaml)}---\n${newBody}`;
+				const newContents = `---\n${stringifyYaml(
+					newYaml
+				)}---\n${newBody}`;
 				await this.app.vault.modify(file, newContents);
 			}
 		} else {
@@ -116,51 +114,5 @@ export default class JoplinPlugin extends Plugin {
 		}
 
 		new Notice("The sync was successful.");
-	}
-}
-
-class JoplinSettingTab extends PluginSettingTab {
-	plugin: JoplinPlugin;
-
-	constructor(app: App, plugin: JoplinPlugin) {
-		super(app, plugin);
-		this.plugin = plugin;
-	}
-
-	/**
-	 * Displays the Joplin Authorization token setting in the plugin's container element.
-	 */
-	display(): void {
-		const { containerEl } = this;
-
-		containerEl.empty();
-
-		new Setting(containerEl)
-			.setName("Joplin Base Url")
-			.setDesc(
-				"The base path of the joplin web service, defaults to http://localhost:41184"
-			)
-			.addText((text) =>
-				text
-					.setPlaceholder("http://localhost:41184")
-					.setValue(this.plugin.settings.baseUrl)
-					.onChange(async (value) => {
-						this.plugin.settings.baseUrl = value;
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(containerEl)
-			.setName("Joplin Authorization token")
-			.setDesc("Enter your Joplin Authorization token")
-			.addText((text) => {
-				text.inputEl.type = "password";
-				text.setPlaceholder("Enter your token")
-					.setValue(this.plugin.settings.token)
-					.onChange(async (value) => {
-						this.plugin.settings.token = value;
-						await this.plugin.saveSettings();
-					});
-			});
 	}
 }
