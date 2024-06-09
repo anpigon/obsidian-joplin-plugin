@@ -1,4 +1,3 @@
-import { joplinDataApi } from "joplin-api";
 import {
 	App,
 	Notice,
@@ -7,9 +6,9 @@ import {
 	Setting,
 	TFile,
 	getFrontMatterInfo,
-	parseYaml,
 	stringifyYaml,
 } from "obsidian";
+import JoplinClient from "./helpers/joplin";
 
 interface JoplinPluginSettings {
 	baseUrl: string;
@@ -75,75 +74,47 @@ export default class JoplinPlugin extends Plugin {
 		console.log("contents", contents);
 
 		const { contentStart, frontmatter } = getFrontMatterInfo(contents);
-		const yml = parseYaml(frontmatter) ?? {};
-		console.log("frontmatter", yml);
 
-		const title = yml?.["title"] || file.basename;
-		const joplinId = yml?.["joplin_id"];
+		const joplinClient = new JoplinClient(
+			this.settings.baseUrl || DEFAULT_SETTINGS.baseUrl,
+			this.settings.token
+		);
+
+		const joplinYaml = joplinClient.parseFrontMatter(frontmatter);
+		console.log("frontmatter", joplinYaml);
+
+		const title = joplinYaml.title || file.basename;
 		const body = contents.slice(contentStart);
 
-		const api = joplinDataApi({
-			type: "rest",
-			baseUrl: this.settings.baseUrl || DEFAULT_SETTINGS.baseUrl,
-			token: this.settings.token,
-		});
-
-		if (joplinId) {
-			// TODO: 최근 업데이트 날짜 비교하여 동기화 하기
-			const notes = await api.note.get(joplinId, [
-				"parent_id",
-				"id",
-				"title",
-				"body",
-				"created_time",
-				"updated_time",
-				"user_created_time",
-				"user_updated_time",
-				"is_conflict",
-				"latitude",
-				"longitude",
-				"altitude",
-				"author",
-				"source_url",
-				"is_todo",
-				"todo_due",
-				"todo_completed",
-				"source",
-				"source_application",
-				"application_data",
-				"order",
-			]);
-			console.log(notes);
-
-			const joplinUpdatedTime = notes?.["updated_time"];
+		if (joplinYaml.joplinId) {
+			const notes = await joplinClient.getJoplinNote(joplinYaml.joplinId);
+			const joplinUpdatedTime = notes["updated_time"];
 			const obsidianUpdatedTime = file?.stat.mtime;
 			if (joplinUpdatedTime < obsidianUpdatedTime) {
 				console.log("obsidian -> joplin");
-				const results = await api.note.update({
-					id: joplinId,
-					title,
-					body,
-				});
-				console.log(results);
+				await joplinClient.updateJoplinNote(joplinYaml.joplinId, title, body);
 			} else {
 				console.log("joplin -> obsidian");
-				const newTitleFromJoplin = notes?.["title"] ?? yml?.["title"] ?? file.basename;
-				const newBodyFromJoplin = (notes?.["body"] ?? body).replace(/&nbsp;/g, " ");
-				yml["title"] = newTitleFromJoplin;
-				await this.app.vault.modify(
-					file,
-					`---\n${stringifyYaml(yml)}---\n${newBodyFromJoplin}`
-				);
+				const newTitle = notes["title"] ?? title;
+				const newBody = notes["body"]?.replace(/&nbsp;/g, " ") ?? body;
+				const newYaml = {
+					...joplinYaml,
+					title: newTitle,
+				};
+				const newContents = `---\n${stringifyYaml(newYaml)}---\n${newBody}`;
+				await this.app.vault.modify(file, newContents);
 			}
 		} else {
-			const results = await api.note.create({ title, body });
-			yml["joplin_id"] = results.id;
-			yml["title"] = title
-			await this.app.vault.modify(
-				file,
-				`---\n${stringifyYaml(yml)}---\n${body}`
-			);
+			const results = await joplinClient.createNewJoplinNote(title, body);
+			const newYaml = {
+				...joplinYaml,
+				joplinId: results.id,
+				title,
+			};
+			const newContents = `---\n${stringifyYaml(newYaml)}---\n${body}`;
+			await this.app.vault.modify(file, newContents);
 		}
+
 		new Notice("The sync was successful.");
 	}
 }
