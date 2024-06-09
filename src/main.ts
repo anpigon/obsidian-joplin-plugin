@@ -23,25 +23,20 @@ export default class JoplinPlugin extends Plugin {
 		this.addCommand({
 			id: "sync-this-note",
 			name: "sync this note",
-			editorCheckCallback: (checking, editor, ctx) => {
-				// Conditions to check
+			editorCallback: (editor, ctx) => {
 				if (!this.settings.token) {
 					new Notice(
 						"Please enter your Joplin access token in Settings."
 					);
-					return false;
+					return;
 				}
 
 				if (!ctx.file) {
-					return false;
+					new Notice("This note is not saved yet.");
+					return;
 				}
 
-				if (!checking) {
-					this.sync(ctx.file);
-				}
-
-				// This command will only show up in Command Palette when the check function returns true
-				return true;
+				this.sync(ctx.file);
 			},
 		});
 
