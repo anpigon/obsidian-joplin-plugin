@@ -5,6 +5,7 @@ import {
 	getFrontMatterInfo,
 	stringifyYaml,
 } from "obsidian";
+import Diff from "diff";
 import JoplinClient from "./helpers/joplin";
 import {
 	DEFAULT_SETTINGS,
@@ -87,7 +88,13 @@ export default class JoplinPlugin extends Plugin {
 			} else {
 				console.log("joplin -> obsidian");
 				const newTitle = notes["title"] ?? title;
-				const newBody = notes["body"]?.replace(/&nbsp;/g, " ") ?? body;
+				const joplinBody = notes["body"]?.replace(/&nbsp;/g, " ") ?? "";
+				const diff = Diff.diffChars(joplinBody, body);
+				const newBody = diff.reduce(
+					(fragment, part) => fragment + part.value,
+					""
+				);
+
 				const newYaml = {
 					...joplinYaml,
 					title: newTitle,
