@@ -81,18 +81,64 @@ export default class JoplinPlugin extends Plugin {
 		const title = yml?.["title"] || file.basename;
 		const joplinId = yml?.["joplin_id"];
 		const body = contents.slice(contentStart);
-		
+
 		const api = joplinDataApi({
 			type: "rest",
 			baseUrl: this.settings.baseUrl || DEFAULT_SETTINGS.baseUrl,
 			token: this.settings.token,
 		});
-		
+
 		if (joplinId) {
-			await api.note.update({ id: joplinId, title, body });
+			// TODO: 최근 업데이트 날짜 비교하여 동기화 하기
+			const notes = await api.note.get(joplinId, [
+				"parent_id",
+				"id",
+				"title",
+				"body",
+				"created_time",
+				"updated_time",
+				"user_created_time",
+				"user_updated_time",
+				"is_conflict",
+				"latitude",
+				"longitude",
+				"altitude",
+				"author",
+				"source_url",
+				"is_todo",
+				"todo_due",
+				"todo_completed",
+				"source",
+				"source_application",
+				"application_data",
+				"order",
+			]);
+			console.log(notes);
+
+			const joplinUpdatedTime = notes?.["updated_time"];
+			const obsidianUpdatedTime = file?.stat.mtime;
+			if (joplinUpdatedTime < obsidianUpdatedTime) {
+				console.log("obsidian -> joplin");
+				const results = await api.note.update({
+					id: joplinId,
+					title,
+					body,
+				});
+				console.log(results);
+			} else {
+				console.log("joplin -> obsidian");
+				const newTitleFromJoplin = notes?.["title"] ?? yml?.["title"] ?? file.basename;
+				const newBodyFromJoplin = (notes?.["body"] ?? body).replace(/&nbsp;/g, " ");
+				yml["title"] = newTitleFromJoplin;
+				await this.app.vault.modify(
+					file,
+					`---\n${stringifyYaml(yml)}---\n${newBodyFromJoplin}`
+				);
+			}
 		} else {
 			const results = await api.note.create({ title, body });
 			yml["joplin_id"] = results.id;
+			yml["title"] = title
 			await this.app.vault.modify(
 				file,
 				`---\n${stringifyYaml(yml)}---\n${body}`
