@@ -73,20 +73,21 @@ export default class JoplinPlugin extends Plugin {
 	async sync(file: TFile) {
 		const contents = await this.app.vault.read(file);
 		console.log("contents", contents);
+
 		const { contentStart, frontmatter } = getFrontMatterInfo(contents);
-		const yml = parseYaml(frontmatter);
+		const yml = parseYaml(frontmatter) ?? {};
 		console.log("frontmatter", yml);
-		const title = yml["title"] || file.basename;
+
+		const title = yml?.["title"] || file.basename;
+		const joplinId = yml?.["joplin_id"];
 		const body = contents.slice(contentStart);
+		
 		const api = joplinDataApi({
 			type: "rest",
 			baseUrl: this.settings.baseUrl || DEFAULT_SETTINGS.baseUrl,
 			token: this.settings.token,
 		});
-
-		// TODO: 최근 업데이트 날짜 비교하여 동기화 하기
-
-		const joplinId = yml["joplin_id"];
+		
 		if (joplinId) {
 			await api.note.update({ id: joplinId, title, body });
 		} else {
