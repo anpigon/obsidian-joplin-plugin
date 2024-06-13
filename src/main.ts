@@ -5,7 +5,7 @@ import {
 	getFrontMatterInfo,
 	stringifyYaml,
 } from "obsidian";
-import Diff from "diff";
+import * as Diff from "diff";
 import JoplinClient from "./helpers/joplin";
 import {
 	DEFAULT_SETTINGS,
@@ -78,6 +78,7 @@ export default class JoplinPlugin extends Plugin {
 			const notes = await joplinClient.getJoplinNote(joplinYaml.joplinId);
 			const joplinUpdatedTime = notes["updated_time"];
 			const obsidianUpdatedTime = file?.stat.mtime;
+
 			if (joplinUpdatedTime < obsidianUpdatedTime) {
 				console.log("obsidian -> joplin");
 				await joplinClient.updateJoplinNote(
@@ -90,10 +91,12 @@ export default class JoplinPlugin extends Plugin {
 				const newTitle = notes["title"] ?? title;
 				const joplinBody = notes["body"]?.replace(/&nbsp;/g, " ") ?? "";
 				const diff = Diff.diffChars(joplinBody, body);
+				console.log("diff", diff);
 				const newBody = diff.reduce(
 					(fragment, part) => fragment + part.value,
 					""
 				);
+				console.log("newBody", newBody);
 
 				const newYaml = {
 					...joplinYaml,
@@ -105,6 +108,7 @@ export default class JoplinPlugin extends Plugin {
 				await this.app.vault.modify(file, newContents);
 			}
 		} else {
+			// create new note to joplin
 			const results = await joplinClient.createNewJoplinNote(title, body);
 			const newYaml = {
 				...joplinYaml,
