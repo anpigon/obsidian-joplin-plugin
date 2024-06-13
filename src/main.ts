@@ -1,7 +1,6 @@
 import * as Diff from "diff";
 import {
 	MarkdownFileInfo,
-	MarkdownView,
 	Notice,
 	Plugin,
 	TFile,
@@ -23,8 +22,8 @@ export default class JoplinPlugin extends Plugin {
 		await this.loadSettings();
 
 		this.addCommand({
-			id: "sync-this-note",
-			name: "Sync this note",
+			id: "sync-this-note-two-way",
+			name: "Two-way sync this note",
 			editorCallback: async (editor, ctx) => {
 				try {
 					if (!this.checkPluginSetting() || !this.checkNoteFile(ctx))
@@ -32,7 +31,22 @@ export default class JoplinPlugin extends Plugin {
 
 					await this.sync(ctx.file);
 				} catch (error) {
-					new Notice(error);
+					new Notice(error.message || error);
+				}
+			},
+		});
+
+		this.addCommand({
+			id: "update-this-note-to-joplin",
+			name: "Update this note to Joplin",
+			editorCallback: async (editor, ctx) => {
+				try {
+					if (!this.checkPluginSetting() || !this.checkNoteFile(ctx))
+						return;
+
+					await this.updateToJoplin(ctx.file);
+				} catch (error) {
+					new Notice(error.message || error);
 				}
 			},
 		});
@@ -82,16 +96,13 @@ export default class JoplinPlugin extends Plugin {
 			);
 
 			const joplinYaml = joplinClient.parseFrontMatter(frontmatter);
-
+			const joplinId = joplinYaml.joplinId;
 			const obsidianNoteTitle = joplinYaml.title || file.basename;
 			const obsidianNoteBody = contents.slice(contentStart);
 			const obsidianNoteUpdatedTime = file.stat.mtime;
 
-			if (joplinYaml.joplinId) {
-				const notes = await joplinClient.getJoplinNote(
-					joplinYaml.joplinId
-				);
-
+			if (joplinId) {
+				const notes = await joplinClient.getJoplinNote(joplinId);
 				const joplinNoteBody =
 					notes.body?.replace(/&nbsp;/g, " ") || "";
 				const joplinNoteTitle = notes.title || "";
@@ -116,7 +127,7 @@ export default class JoplinPlugin extends Plugin {
 					.reduce((fragment, part) => fragment + part.value, "");
 
 				await joplinClient.updateJoplinNote(
-					joplinYaml.joplinId,
+					joplinId,
 					newTitle,
 					newBody
 				);
@@ -128,6 +139,63 @@ export default class JoplinPlugin extends Plugin {
 				await this.app.vault.modify(
 					file,
 					`---\n${stringifyYaml(newYaml)}---\n${newBody}`
+				);
+			} else {
+				const results = await joplinClient.createNewJoplinNote(
+					obsidianNoteTitle,
+					obsidianNoteBody
+				);
+				const newYaml = {
+					...joplinYaml,
+					joplinId: results.id,
+					title: obsidianNoteTitle,
+				};
+				const newContents = `---\n${stringifyYaml(
+					newYaml
+				)}---\n${obsidianNoteBody}`;
+				await this.app.vault.modify(file, newContents);
+			}
+
+			new Notice("The sync was successful.");
+		} catch (error) {
+			const errorMessage =
+				error.message ||
+				error.toString() ||
+				"An unknown error occurred.";
+			if (errorMessage.startsWith("status: 404")) {
+				new Notice(
+					"No notes were found in Joplin, try checking joplinId."
+				);
+			} else {
+				new Notice(errorMessage);
+			}
+		}
+	}
+
+	async updateToJoplin(file: TFile) {
+		try {
+			const contents = await this.app.vault.read(file);
+			const { contentStart, frontmatter } = getFrontMatterInfo(contents);
+
+			if (contentStart === undefined || frontmatter === undefined) {
+				throw new Error("Invalid front matter format");
+			}
+
+			const joplinClient = new JoplinClient(
+				this.settings.baseUrl || DEFAULT_SETTINGS.baseUrl,
+				this.settings.token
+			);
+
+			const joplinYaml = joplinClient.parseFrontMatter(frontmatter);
+			const joplinId = joplinYaml.joplinId;
+			const obsidianNoteTitle = joplinYaml.title || file.basename;
+			const obsidianNoteBody = contents.slice(contentStart);
+
+			if (joplinId) {
+				await joplinClient.updateJoplinNote(
+					joplinId,
+					obsidianNoteTitle,
+					obsidianNoteBody
 				);
 			} else {
 				const results = await joplinClient.createNewJoplinNote(
