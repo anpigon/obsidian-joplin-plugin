@@ -89,12 +89,12 @@ export default class JoplinPlugin extends Plugin {
 					: joplinNoteTitle;
 			const diffBody =
 				obsidianNoteUpdatedTime > joplinNoteUpdatedTime
-					? Diff.diffChars(obsidianNoteBody, joplinNoteBody) // obsidian -> joplin
-					: Diff.diffChars(joplinNoteBody, obsidianNoteBody); // joplin -> obsidian
-			const newBody = diffBody.reduce(
-				(fragment, part) => fragment + part.value,
-				""
-			);
+					? Diff.diffChars(joplinNoteBody, obsidianNoteBody)
+					: Diff.diffChars(obsidianNoteBody, joplinNoteBody);
+			console.log(diffBody);
+			const newBody = diffBody
+				.filter((e) => !e.removed)
+				.reduce((fragment, part) => fragment + part.value, "");
 			console.log("newBody", newBody);
 
 			console.log("obsidian -> joplin");
