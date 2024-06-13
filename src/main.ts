@@ -13,6 +13,7 @@ import {
 	JoplinPluginSettings,
 	JoplinSettingTab,
 } from "./settings";
+import parseFrontMatter from "./helpers/parseFrontMatter";
 
 export default class JoplinPlugin extends Plugin {
 	settings: JoplinPluginSettings;
@@ -95,7 +96,7 @@ export default class JoplinPlugin extends Plugin {
 				this.settings.token
 			);
 
-			const joplinYaml = joplinClient.parseFrontMatter(frontmatter);
+			const joplinYaml = parseFrontMatter(frontmatter);
 			const joplinId = joplinYaml.joplinId;
 			const obsidianNoteTitle = joplinYaml.title || file.basename;
 			const obsidianNoteBody = contents.slice(contentStart);
@@ -186,7 +187,7 @@ export default class JoplinPlugin extends Plugin {
 				this.settings.token
 			);
 
-			const joplinYaml = joplinClient.parseFrontMatter(frontmatter);
+			const joplinYaml = parseFrontMatter(frontmatter);
 			const joplinId = joplinYaml.joplinId;
 			const obsidianNoteTitle = joplinYaml.title || file.basename;
 			const obsidianNoteBody = contents.slice(contentStart);
