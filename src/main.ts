@@ -1,5 +1,7 @@
 import * as Diff from "diff";
 import {
+	MarkdownFileInfo,
+	MarkdownView,
 	Notice,
 	Plugin,
 	TFile,
@@ -24,23 +26,33 @@ export default class JoplinPlugin extends Plugin {
 			id: "sync-this-note",
 			name: "Sync this note",
 			editorCallback: async (editor, ctx) => {
-				if (!this.settings.token) {
-					new Notice(
-						"Please enter your Joplin access token in Settings."
-					);
-					return;
-				}
+				try {
+					if (!this.checkPluginSetting() || !this.checkNoteFile(ctx))
+						return;
 
-				if (!ctx.file) {
-					new Notice("This note is not saved yet.");
-					return;
+					await this.sync(ctx.file);
+				} catch (error) {
+					new Notice(error);
 				}
-
-				await this.sync(ctx.file);
 			},
 		});
 
 		this.addSettingTab(new JoplinSettingTab(this.app, this));
+	}
+
+	checkPluginSetting() {
+		if (!this.settings.token)
+			throw new Error(
+				"Please enter your Joplin access token in Settings."
+			);
+		return true;
+	}
+
+	checkNoteFile(
+		ctx: MarkdownFileInfo
+	): ctx is MarkdownFileInfo & { file: TFile } {
+		if (!ctx.file) throw new Error("This note is not saved yet.");
+		return true;
 	}
 
 	async loadSettings() {
