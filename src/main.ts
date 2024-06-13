@@ -58,78 +58,94 @@ export default class JoplinPlugin extends Plugin {
 	}
 
 	async sync(file: TFile) {
-		const contents = await this.app.vault.read(file);
-		console.log("contents", contents);
+		try {
+			const contents = await this.app.vault.read(file);
+			console.log("contents", contents);
 
-		const { contentStart, frontmatter } = getFrontMatterInfo(contents);
+			const { contentStart, frontmatter } = getFrontMatterInfo(contents);
 
-		const joplinClient = new JoplinClient(
-			this.settings.baseUrl || DEFAULT_SETTINGS.baseUrl,
-			this.settings.token
-		);
-
-		const joplinYaml = joplinClient.parseFrontMatter(frontmatter);
-		console.log("frontmatter", joplinYaml);
-
-		const obsidianNoteTitle = joplinYaml.title || file.basename;
-		const obsidianNoteBody = contents.slice(contentStart);
-		const obsidianNoteUpdatedTime = file?.stat.mtime;
-
-		if (joplinYaml.joplinId) {
-			const notes = await joplinClient.getJoplinNote(joplinYaml.joplinId);
-			console.log("exist joplin note", notes);
-
-			const joplinNoteBody = notes["body"]?.replace(/&nbsp;/g, " ") ?? "";
-			const joplinNoteTitle = notes["title"] ?? "";
-			const joplinNoteUpdatedTime = notes["updated_time"];
-
-			const newTitle =
-				obsidianNoteUpdatedTime > joplinNoteUpdatedTime
-					? obsidianNoteTitle
-					: joplinNoteTitle;
-			const diffBody =
-				obsidianNoteUpdatedTime > joplinNoteUpdatedTime
-					? Diff.diffChars(joplinNoteBody, obsidianNoteBody)
-					: Diff.diffChars(obsidianNoteBody, joplinNoteBody);
-			console.log(diffBody);
-			const newBody = diffBody
-				.filter((e) => !e.removed)
-				.reduce((fragment, part) => fragment + part.value, "");
-			console.log("newBody", newBody);
-
-			console.log("obsidian -> joplin");
-			await joplinClient.updateJoplinNote(
-				joplinYaml.joplinId,
-				newTitle,
-				newBody
+			const joplinClient = new JoplinClient(
+				this.settings.baseUrl || DEFAULT_SETTINGS.baseUrl,
+				this.settings.token
 			);
 
-			console.log("joplin -> obsidian");
-			const newYaml = {
-				...joplinYaml,
-				title: newTitle,
-			};
-			await this.app.vault.modify(
-				file,
-				`---\n${stringifyYaml(newYaml)}---\n${newBody}`
-			);
-		} else {
-			// create new note to joplin
-			const results = await joplinClient.createNewJoplinNote(
-				obsidianNoteTitle,
-				obsidianNoteBody
-			);
-			const newYaml = {
-				...joplinYaml,
-				joplinId: results.id,
-				title: obsidianNoteTitle,
-			};
-			const newContents = `---\n${stringifyYaml(
-				newYaml
-			)}---\n${obsidianNoteBody}`;
-			await this.app.vault.modify(file, newContents);
+			const joplinYaml = joplinClient.parseFrontMatter(frontmatter);
+			console.log("frontmatter", joplinYaml);
+
+			const obsidianNoteTitle = joplinYaml.title || file.basename;
+			const obsidianNoteBody = contents.slice(contentStart);
+			const obsidianNoteUpdatedTime = file?.stat.mtime;
+
+			if (joplinYaml.joplinId) {
+				const notes = await joplinClient.getJoplinNote(
+					joplinYaml.joplinId
+				);
+				console.log("exist joplin note", notes);
+
+				const joplinNoteBody =
+					notes["body"]?.replace(/&nbsp;/g, " ") ?? "";
+				const joplinNoteTitle = notes["title"] ?? "";
+				const joplinNoteUpdatedTime = notes["updated_time"];
+
+				const newTitle =
+					obsidianNoteUpdatedTime > joplinNoteUpdatedTime
+						? obsidianNoteTitle
+						: joplinNoteTitle;
+				const diffBody =
+					obsidianNoteUpdatedTime > joplinNoteUpdatedTime
+						? Diff.diffChars(joplinNoteBody, obsidianNoteBody)
+						: Diff.diffChars(obsidianNoteBody, joplinNoteBody);
+				console.log(diffBody);
+				const newBody = diffBody
+					.filter((e) => !e.removed)
+					.reduce((fragment, part) => fragment + part.value, "");
+				console.log("newBody", newBody);
+
+				console.log("obsidian -> joplin");
+				await joplinClient.updateJoplinNote(
+					joplinYaml.joplinId,
+					newTitle,
+					newBody
+				);
+
+				console.log("joplin -> obsidian");
+				const newYaml = {
+					...joplinYaml,
+					title: newTitle,
+				};
+				await this.app.vault.modify(
+					file,
+					`---\n${stringifyYaml(newYaml)}---\n${newBody}`
+				);
+			} else {
+				// create new note to joplin
+				const results = await joplinClient.createNewJoplinNote(
+					obsidianNoteTitle,
+					obsidianNoteBody
+				);
+				const newYaml = {
+					...joplinYaml,
+					joplinId: results.id,
+					title: obsidianNoteTitle,
+				};
+				const newContents = `---\n${stringifyYaml(
+					newYaml
+				)}---\n${obsidianNoteBody}`;
+				await this.app.vault.modify(file, newContents);
+			}
+
+			new Notice("The sync was successful.");
+		} catch (error) {
+			const errorMessage =
+				error?.message ??
+				error?.toString() ??
+				"An unknown error occurred.";
+			if (errorMessage.startsWith("status: 404")) {
+				return new Notice(
+					"No notes were found in Joplin, try checking joplinId."
+				);
+			}
+			return new Notice(errorMessage);
 		}
-
-		new Notice("The sync was successful.");
 	}
 }
