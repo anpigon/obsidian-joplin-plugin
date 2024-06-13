@@ -1,3 +1,4 @@
+import * as Diff from "diff";
 import {
 	Notice,
 	Plugin,
@@ -5,7 +6,6 @@ import {
 	getFrontMatterInfo,
 	stringifyYaml,
 } from "obsidian";
-import * as Diff from "diff";
 import JoplinClient from "./helpers/joplin";
 import {
 	DEFAULT_SETTINGS,
@@ -71,51 +71,62 @@ export default class JoplinPlugin extends Plugin {
 		const joplinYaml = joplinClient.parseFrontMatter(frontmatter);
 		console.log("frontmatter", joplinYaml);
 
-		const title = joplinYaml.title || file.basename;
-		const body = contents.slice(contentStart);
+		const obsidianNoteTitle = joplinYaml.title || file.basename;
+		const obsidianNoteBody = contents.slice(contentStart);
+		const obsidianNoteUpdatedTime = file?.stat.mtime;
 
 		if (joplinYaml.joplinId) {
 			const notes = await joplinClient.getJoplinNote(joplinYaml.joplinId);
-			const joplinUpdatedTime = notes["updated_time"];
-			const obsidianUpdatedTime = file?.stat.mtime;
+			console.log("exist joplin note", notes);
 
-			if (joplinUpdatedTime < obsidianUpdatedTime) {
-				console.log("obsidian -> joplin");
-				await joplinClient.updateJoplinNote(
-					joplinYaml.joplinId,
-					title,
-					body
-				);
-			} else {
-				console.log("joplin -> obsidian");
-				const newTitle = notes["title"] ?? title;
-				const joplinBody = notes["body"]?.replace(/&nbsp;/g, " ") ?? "";
-				const diff = Diff.diffChars(joplinBody, body);
-				console.log("diff", diff);
-				const newBody = diff.reduce(
-					(fragment, part) => fragment + part.value,
-					""
-				);
-				console.log("newBody", newBody);
+			const joplinNoteBody = notes["body"]?.replace(/&nbsp;/g, " ") ?? "";
+			const joplinNoteTitle = notes["title"] ?? "";
+			const joplinNoteUpdatedTime = notes["updated_time"];
 
-				const newYaml = {
-					...joplinYaml,
-					title: newTitle,
-				};
-				const newContents = `---\n${stringifyYaml(
-					newYaml
-				)}---\n${newBody}`;
-				await this.app.vault.modify(file, newContents);
-			}
+			const newTitle =
+				obsidianNoteUpdatedTime > joplinNoteUpdatedTime
+					? obsidianNoteTitle
+					: joplinNoteTitle;
+			const diffBody =
+				obsidianNoteUpdatedTime > joplinNoteUpdatedTime
+					? Diff.diffChars(obsidianNoteBody, joplinNoteBody) // obsidian -> joplin
+					: Diff.diffChars(joplinNoteBody, obsidianNoteBody); // joplin -> obsidian
+			const newBody = diffBody.reduce(
+				(fragment, part) => fragment + part.value,
+				""
+			);
+			console.log("newBody", newBody);
+
+			console.log("obsidian -> joplin");
+			await joplinClient.updateJoplinNote(
+				joplinYaml.joplinId,
+				newTitle,
+				newBody
+			);
+
+			console.log("joplin -> obsidian");
+			const newYaml = {
+				...joplinYaml,
+				title: newTitle,
+			};
+			await this.app.vault.modify(
+				file,
+				`---\n${stringifyYaml(newYaml)}---\n${newBody}`
+			);
 		} else {
 			// create new note to joplin
-			const results = await joplinClient.createNewJoplinNote(title, body);
+			const results = await joplinClient.createNewJoplinNote(
+				obsidianNoteTitle,
+				obsidianNoteBody
+			);
 			const newYaml = {
 				...joplinYaml,
 				joplinId: results.id,
-				title,
+				title: obsidianNoteTitle,
 			};
-			const newContents = `---\n${stringifyYaml(newYaml)}---\n${body}`;
+			const newContents = `---\n${stringifyYaml(
+				newYaml
+			)}---\n${obsidianNoteBody}`;
 			await this.app.vault.modify(file, newContents);
 		}
 
