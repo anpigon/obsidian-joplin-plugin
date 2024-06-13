@@ -43,7 +43,7 @@ export default class JoplinClient {
 
 	parseFrontMatter(frontmatter: string): JoplinFrontMatter {
 		const yml = parseYaml(frontmatter) ?? {};
-		const joplinId = yml?.["joplin_id"];
+		const joplinId = yml?.["joplinId"];
 		const title = yml?.["title"];
 		return {
 			joplinId,
