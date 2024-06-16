@@ -1,5 +1,4 @@
 import { Api, NoteProperties, joplinDataApi } from "joplin-api";
-import { parseYaml } from "obsidian";
 
 const joplinNoteFields: (keyof NoteProperties)[] = [
 	"parent_id",
@@ -39,16 +38,6 @@ export default class JoplinClient {
 			baseUrl,
 			token,
 		});
-	}
-
-	parseFrontMatter(frontmatter: string): JoplinFrontMatter {
-		const yml = parseYaml(frontmatter) ?? {};
-		const joplinId = yml?.["joplin_id"];
-		const title = yml?.["title"];
-		return {
-			joplinId,
-			title,
-		};
 	}
 
 	async updateJoplinNote(id: string, title: string, body: string) {

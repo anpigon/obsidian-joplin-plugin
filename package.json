@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-joplin-plugin",
-	"version": "1.0.3",
+	"version": "1.0.4",
 	"description": "Sync your obsidian and joplin notes.",
 	"main": "main.js",
 	"scripts": {
@@ -12,6 +12,7 @@
 	"author": "",
 	"license": "MIT",
 	"devDependencies": {
+		"@types/diff": "^5.2.1",
 		"@types/node": "^20.14.2",
 		"@typescript-eslint/eslint-plugin": "7.12.0",
 		"@typescript-eslint/parser": "7.12.0",
@@ -22,6 +23,7 @@
 		"typescript": "5.4.5"
 	},
 	"dependencies": {
+		"diff": "^5.2.0",
 		"joplin-api": "^0.6.0"
 	}
 }
