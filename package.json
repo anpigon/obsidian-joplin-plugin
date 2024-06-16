@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-joplin-plugin",
-	"version": "1.0.4",
+	"version": "1.0.5",
 	"description": "Sync your obsidian and joplin notes.",
 	"main": "main.js",
 	"scripts": {
