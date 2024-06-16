@@ -58,7 +58,6 @@ export default class JoplinPlugin extends Plugin {
 
 	async sync(file: TFile) {
 		const contents = await this.app.vault.read(file);
-		console.log("contents", contents);
 
 		const { contentStart, frontmatter } = getFrontMatterInfo(contents);
 
@@ -68,7 +67,6 @@ export default class JoplinPlugin extends Plugin {
 		);
 
 		const joplinYaml = joplinClient.parseFrontMatter(frontmatter);
-		console.log("frontmatter", joplinYaml);
 
 		const title = joplinYaml.title || file.basename;
 		const body = contents.slice(contentStart);
